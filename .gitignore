@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Database - Security
+attendance.db
+
+# Uploads - Student Privacy
+static/uploads/*.jpg
+static/uploads/*.png
+static/uploads/*.jpeg
+
+# Heavy AI Models
+static/models/*.onnx
+static/models/*.pb
+static/models/*.h5
