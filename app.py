@@ -71,7 +71,7 @@ def login():
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user['role']
-            session['subject'] = user['subject']
+            session['subject'] = user['subject'] if user['subject'] else "General"
             
             if user['role'] == 'teacher':
                 return redirect(url_for('teacher_dashboard'))
@@ -219,7 +219,7 @@ def export_csv():
     if 'user_id' not in session or session['role'] != 'teacher':
         return redirect(url_for('login'))
         
-    subject = session['subject']
+    subject = session.get('subject') or "General"
     selected_date = request.args.get('date', datetime.date.today().strftime("%Y-%m-%d"))
     
     conn = get_db_connection()
