@@ -148,6 +148,7 @@
                 <label for="date" style="font-weight: 500; color: var(--text-muted);">Select Date:</label>
                 <input type="date" id="date" name="date" value="{{ selected_date }}" style="padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-family: inherit;">
                 <button type="submit" class="btn" style="padding: 8px 16px;">Filter</button>
+                <a href="/export_csv?date={{ selected_date }}" class="btn" style="padding: 8px 16px; background: #10b981; margin-left: auto; text-decoration: none;">⬇️ Download Excel/CSV</a>
             </form>
 
             <table>

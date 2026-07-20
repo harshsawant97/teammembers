@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, Response
 import sqlite3
 import os
 import base64
 import datetime
-# import cv2
-# from deepface import DeepFace  # Commented out temporarily for quick startup
+import csv
+import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key'
@@ -28,11 +29,10 @@ def login():
         password = request.form['password']
         
         conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?', 
-                            (username, password)).fetchone()
+        user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
         conn.close()
         
-        if user:
+        if user and (check_password_hash(user['password'], password) or user['password'] == password):
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user['role']
@@ -57,10 +57,12 @@ def signup():
         role = request.form['role']
         subject = request.form.get('subject') # Optional from form
         
+        hashed_password = generate_password_hash(password)
+        
         conn = get_db_connection()
         try:
             conn.execute('INSERT INTO users (username, password, role, subject) VALUES (?, ?, ?, ?)', 
-                         (username, password, role, subject))
+                         (username, hashed_password, role, subject))
             conn.commit()
             flash('Account created successfully! You can now log in.')
             return redirect(url_for('login'))
@@ -176,6 +178,36 @@ def manual_mark_present(student_id, date):
     conn.close()
     
     return redirect(url_for('teacher_dashboard', date=date))
+
+@app.route('/export_csv')
+def export_csv():
+    if 'user_id' not in session or session['role'] != 'teacher':
+        return redirect(url_for('login'))
+        
+    subject = session['subject']
+    selected_date = request.args.get('date', datetime.date.today().strftime("%Y-%m-%d"))
+    
+    conn = get_db_connection()
+    all_students = conn.execute('SELECT id, username FROM users WHERE role = "student"').fetchall()
+    attendance_records = conn.execute('SELECT student_id, status FROM attendance WHERE date = ? AND subject = ?', (selected_date, subject)).fetchall()
+    conn.close()
+    
+    attendance_map = {row['student_id']: row['status'] for row in attendance_records}
+    
+    def generate():
+        data = [['Student ID', 'Student Name', 'Date', 'Status']]
+        for student in all_students:
+            status = attendance_map.get(student['id'], 'Absent')
+            data.append([student['id'], student['username'], selected_date, status])
+            
+        for row in data:
+            yield ','.join(map(str, row)) + '\n'
+            
+    headers = {
+        'Content-Disposition': f'attachment; filename=attendance_{subject}_{selected_date}.csv',
+        'Content-Type': 'text/csv'
+    }
+    return Response(generate(), headers=headers)
 
 @app.route('/student-dashboard')
 def student_dashboard():

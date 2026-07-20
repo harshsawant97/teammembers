@@ -32,11 +32,11 @@
         <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Logo" style="height: 60px; width: 60px; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
         <h2 style="color: #333; margin-top: 0;">Coders Hub Login</h2>
         
-        <!-- Display error messages here -->
-        {% with messages = get_flashed_messages() %}
+        <!-- Display error/success messages here -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
-            {% for message in messages %}
-              <div class="error">{{ message }}</div>
+            {% for category, message in messages %}
+              <div class="error" style="color: {% if category == 'success' %}green{% elif category == 'info' %}blue{% else %}#dc3545{% endif %};">{{ message }}</div>
             {% endfor %}
           {% endif %}
         {% endwith %}
@@ -47,7 +47,7 @@
             <button type="submit">Login</button>
         </form>
         
-        <a href="/signup" style="display: block; margin-top: 15px; color: #007bff; text-decoration: none; font-size: 14px;">Don't have an account? Sign up here</a>
+        <a href="/signup" style="display: block; margin-top: 10px; color: #6c757d; text-decoration: none; font-size: 14px;">Don't have an account? Sign up here</a>
     </div>
 </body>
 </html>
