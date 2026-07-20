@@ -13,6 +13,41 @@ app.secret_key = 'super_secret_key'
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+def init_db():
+    conn = sqlite3.connect('attendance.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL,
+            subject TEXT,
+            face_image_path TEXT,
+            email TEXT,
+            reset_token TEXT
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            student_id INTEGER NOT NULL,
+            subject TEXT NOT NULL,
+            status TEXT NOT NULL,
+            FOREIGN KEY (student_id) REFERENCES users (id)
+        )
+    ''')
+    # Create default admin if it doesn't exist
+    admin_exists = c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
+    if not admin_exists:
+        c.execute("INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
+    
+    conn.commit()
+    conn.close()
+
+init_db()
+
 def get_db_connection():
     conn = sqlite3.connect('attendance.db')
     conn.row_factory = sqlite3.Row
