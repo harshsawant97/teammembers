@@ -160,19 +160,25 @@
         </div>
         {% endfor %}
 
-        {% if not face_registered %}
         <div class="card camera-section">
-            <h2>Initial Face Registration</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Please register your face once for the AI attendance system.</p>
-            <button class="btn" id="startCamera" onclick="startVideo()">Turn on Camera</button>
+            {% if not face_registered %}
+                <h2>Initial Face Registration</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Please register your face once for the AI attendance system.</p>
+                <button class="btn" id="startCamera" onclick="startVideo()">Turn on Camera</button>
+            {% else %}
+                <h2>Update Face Registration</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Your face is successfully registered! Need to update it?</p>
+                <button class="btn" id="startCamera" onclick="startVideo()" style="background: var(--text-muted);">Re-register Face</button>
+            {% endif %}
             
             <video id="video" autoplay></video>
             <canvas id="canvas"></canvas>
             
-            <button class="btn" id="captureBtn" onclick="registerFace()" style="display: none; margin: 1rem auto; background: var(--success);">Register My Face</button>
+            <button class="btn" id="captureBtn" onclick="registerFace()" style="display: none; margin: 1rem auto; background: var(--success);">
+                {% if not face_registered %}Register My Face{% else %}Update My Face{% endif %}
+            </button>
             <p id="registerMsg"></p>
         </div>
-        {% endif %}
 
         <!-- Note: Global Attendance log table removed to keep the dashboard clean. 
              If needed, we can add a route to view detailed logs per subject later. -->
