@@ -1,11 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, Response
-import sqlite3
+import psycopg2
+import psycopg2.extras
+import psycopg2.errors
 import os
 import base64
 import datetime
 import csv
-import secrets
-from werkzeug.security import generate_password_hash, check_password_hash
+import json
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key'
@@ -13,45 +14,76 @@ app.secret_key = 'super_secret_key'
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def init_db():
-    conn = sqlite3.connect('attendance.db')
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            subject TEXT,
-            face_image_path TEXT,
-            email TEXT,
-            reset_token TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS attendance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            student_id INTEGER NOT NULL,
-            subject TEXT NOT NULL,
-            status TEXT NOT NULL,
-            FOREIGN KEY (student_id) REFERENCES users (id)
-        )
-    ''')
-    # Create default admin if it doesn't exist
-    admin_exists = c.execute("SELECT id FROM users WHERE username='admin'").fetchone()
-    if not admin_exists:
-        c.execute("INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
-    
-    conn.commit()
-    conn.close()
+DB_URL = os.environ.get('DATABASE_URL', 'postgresql://attendance_db_3cjz_user:eQonJQgQHus6QEglqfxvmAP6NmWeiqU3@dpg-d9fejk7avr4c73c2vqag-a/attendance_db_3cjz')
 
-init_db()
+class PostgresWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, query, params=None):
+        query = query.replace('?', '%s')
+        cursor = self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        return cursor
+        
+    def commit(self):
+        self.conn.commit()
+        
+    def close(self):
+        self.conn.close()
 
 def get_db_connection():
-    conn = sqlite3.connect('attendance.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn = psycopg2.connect(DB_URL)
+        return PostgresWrapper(conn)
+    except Exception as e:
+        print("Database connection failed. Ensure you are running this on Render (using Internal DB URL).")
+        raise e
+
+def init_db():
+    try:
+        conn = get_db_connection()
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                subject TEXT,
+                face_features TEXT,
+                email TEXT,
+                reset_token TEXT
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS attendance (
+                id SERIAL PRIMARY KEY,
+                date TEXT NOT NULL,
+                student_id INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                status TEXT NOT NULL,
+                FOREIGN KEY (student_id) REFERENCES users (id)
+            )
+        ''')
+        # Create default admin if it doesn't exist
+        admin_exists = conn.execute("SELECT id FROM users WHERE username='admin'").fetchone()
+        if not admin_exists:
+            from werkzeug.security import generate_password_hash
+            hashed = generate_password_hash('admin123')
+            conn.execute("INSERT INTO users (username, password, role) VALUES ('admin', %s, 'admin')", (hashed,))
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Skipping init_db during local dev due to connection issues: {e}")
+
+# We try to init_db on startup if possible
+init_db()
+
+from werkzeug.security import generate_password_hash, check_password_hash
 
 @app.route('/')
 def home():
@@ -67,6 +99,7 @@ def login():
         user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
         conn.close()
         
+        # Admin exception since originally we stored plain text
         if user and (check_password_hash(user['password'], password) or user['password'] == password):
             session['user_id'] = user['id']
             session['username'] = user['username']
@@ -101,7 +134,8 @@ def signup():
             conn.commit()
             flash('Account created successfully! You can now log in.')
             return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
+        except psycopg2.errors.UniqueViolation:
+            conn.conn.rollback()
             flash('Username already exists! Please choose another one.')
         finally:
             conn.close()
@@ -154,7 +188,7 @@ def teacher_dashboard():
         return redirect(url_for('login'))
         
     conn = get_db_connection()
-    subject = session['subject']
+    subject = session.get('subject') or "General"
     selected_date = request.args.get('date', datetime.date.today().strftime("%Y-%m-%d"))
     
     # Get all students
@@ -201,7 +235,7 @@ def manual_mark_present(student_id, date):
     if 'user_id' not in session or session['role'] != 'teacher':
         return redirect(url_for('login'))
         
-    subject = session['subject']
+    subject = session.get('subject') or "General"
     conn = get_db_connection()
     
     exists = conn.execute('SELECT id FROM attendance WHERE student_id = ? AND date = ? AND subject = ?', 
@@ -250,8 +284,8 @@ def student_dashboard():
         return redirect(url_for('login'))
         
     conn = get_db_connection()
-    user = conn.execute('SELECT face_image_path FROM users WHERE id = ?', (session['user_id'],)).fetchone()
-    face_registered = bool(user['face_image_path'])
+    user = conn.execute('SELECT face_features FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    face_registered = bool(user and user['face_features'])
     
     subjects = ['EM-2', 'Engineering Physics', 'DSDA', 'FCSN', 'FCPP']
     student_stats = []
@@ -288,16 +322,48 @@ def register_face():
     encoded_data = image_data.split(',')[1]
     nparr = base64.b64decode(encoded_data)
     
-    file_path = os.path.join(UPLOAD_FOLDER, f"student_{session['user_id']}.jpg")
-    with open(file_path, "wb") as fh:
+    temp_path = os.path.join(UPLOAD_FOLDER, f"temp_student_{session['user_id']}.jpg")
+    with open(temp_path, "wb") as fh:
         fh.write(nparr)
         
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET face_image_path = ? WHERE id = ?', (file_path, session['user_id']))
-    conn.commit()
-    conn.close()
+    import cv2
+    import numpy as np
     
-    return jsonify({'success': True, 'message': 'Face registered successfully!'})
+    models_dir = os.path.join('static', 'models')
+    yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
+    sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
+    
+    success = False
+    
+    if os.path.exists(yunet_path) and os.path.exists(sface_path):
+        s_img = cv2.imread(temp_path)
+        if s_img is not None:
+            height, width, _ = s_img.shape
+            detector = cv2.FaceDetectorYN.create(yunet_path, "", (width, height))
+            recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+            
+            _, s_faces = detector.detect(s_img)
+            if s_faces is not None and len(s_faces) > 0:
+                s_face = s_faces[0]
+                s_aligned = recognizer.alignCrop(s_img, s_face)
+                s_feature = recognizer.feature(s_aligned)
+                
+                # Turn math features into a string for the database!
+                feature_json = json.dumps(s_feature.tolist())
+                
+                conn = get_db_connection()
+                conn.execute('UPDATE users SET face_features = ? WHERE id = ?', (feature_json, session['user_id']))
+                conn.commit()
+                conn.close()
+                success = True
+
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
+        
+    if success:
+        return jsonify({'success': True, 'message': 'Face registered successfully!'})
+    else:
+        return jsonify({'success': False, 'message': 'Face could not be detected.'})
 
 @app.route('/mark_attendance', methods=['POST'])
 def mark_attendance():
@@ -315,98 +381,58 @@ def mark_attendance():
         fh.write(nparr)
         
     conn = get_db_connection()
-    students = conn.execute('SELECT id, face_image_path, username FROM users WHERE role = "student" AND face_image_path IS NOT NULL').fetchall()
+    students = conn.execute('SELECT id, face_features, username FROM users WHERE role = "student" AND face_features IS NOT NULL').fetchall()
     
     recognized_students = []
     
-    # Try to use REAL AI if we are on the local laptop with enough RAM
-    try:
-        from deepface import DeepFace
-        real_ai_available = True
-    except ImportError:
-        real_ai_available = False
-
-    if real_ai_available:
-        try:
-            # GROUP PHOTO UPGRADE: Extract all faces from the classroom image ONCE
-            faces_in_classroom = DeepFace.extract_faces(img_path=temp_path, enforce_detection=True)
-        except Exception as e:
-            # If no faces are detected, DeepFace throws an exception
-            faces_in_classroom = []
-
-        for student in students:
-            match_found = False
-            # Loop through the extracted faces
-            for classroom_face in faces_in_classroom:
-                try:
-                    # Compare the student's registered face against the extracted face array
-                    result = DeepFace.verify(img1_path=student['face_image_path'], img2_path=classroom_face['face'], enforce_detection=False)
-                    if result['verified']:
-                        match_found = True
-                        break # Found them in the crowd!
-                except:
-                    pass
-            if match_found:
-                recognized_students.append(student)
+    import cv2
+    import numpy as np
+    
+    models_dir = os.path.join('static', 'models')
+    yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
+    sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
+    
+    if os.path.exists(yunet_path) and os.path.exists(sface_path):
+        img = cv2.imread(temp_path)
+        if img is not None:
+            height, width, _ = img.shape
+            detector = cv2.FaceDetectorYN.create(yunet_path, "", (width, height))
+            recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+            
+            _, faces = detector.detect(img)
+            faces_in_classroom = faces if faces is not None else []
+            
+            for student in students:
+                match_found = False
                 
-    else:
-        # HIGH-ACCURACY OPENCV SFACE (DEEP LEARNING ONNX)
-        import cv2
-        import numpy as np
-        
-        models_dir = os.path.join('static', 'models')
-        yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
-        sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
-        
-        if os.path.exists(yunet_path) and os.path.exists(sface_path):
-            img = cv2.imread(temp_path)
-            if img is not None:
-                height, width, _ = img.shape
-                detector = cv2.FaceDetectorYN.create(yunet_path, "", (width, height))
-                recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+                # Convert the saved JSON string back into the 128-D math array
+                s_feature_list = json.loads(student['face_features'])
+                s_feature = np.array(s_feature_list, dtype=np.float32)
                 
-                # Detect faces in classroom
-                _, faces = detector.detect(img)
-                faces_in_classroom = faces if faces is not None else []
+                detector.setInputSize((width, height)) # reset for classroom faces
                 
-                for student in students:
-                    match_found = False
-                    s_img = cv2.imread(student['face_image_path'])
+                for c_face in faces_in_classroom:
+                    c_aligned = recognizer.alignCrop(img, c_face)
+                    c_feature = recognizer.feature(c_aligned)
                     
-                    if s_img is not None and len(faces_in_classroom) > 0:
-                        s_h, s_w, _ = s_img.shape
-                        detector.setInputSize((s_w, s_h))
-                        _, s_faces = detector.detect(s_img)
+                    # Calculate cosine similarity (1.0 is exact match, >= 0.363 is same person)
+                    score = recognizer.match(s_feature, c_feature, cv2.FaceRecognizerSF_FR_COSINE)
+                    if score >= 0.363:
+                        match_found = True
+                        break
                         
-                        if s_faces is not None and len(s_faces) > 0:
-                            s_face = s_faces[0]
-                            # Align and extract feature for student
-                            s_aligned = recognizer.alignCrop(s_img, s_face)
-                            s_feature = recognizer.feature(s_aligned)
-                            
-                            detector.setInputSize((width, height)) # reset for classroom faces
-                            
-                            for c_face in faces_in_classroom:
-                                # Align and extract feature for classroom face
-                                c_aligned = recognizer.alignCrop(img, c_face)
-                                c_feature = recognizer.feature(c_aligned)
-                                
-                                # Calculate cosine similarity (1.0 is exact match, >= 0.363 is same person)
-                                score = recognizer.match(s_feature, c_feature, cv2.FaceRecognizerSF_FR_COSINE)
-                                if score >= 0.363:
-                                    match_found = True
-                                    break
-                                    
-                    if match_found and not any(rs['id'] == student['id'] for rs in recognized_students):
-                        recognized_students.append(student)
+                if match_found and not any(rs['id'] == student['id'] for rs in recognized_students):
+                    recognized_students.append(student)
+            
+    teacher_subject = session.get('subject') or "General"
             
     for student in recognized_students:
         today = datetime.date.today().strftime("%Y-%m-%d")
         exists = conn.execute('SELECT id FROM attendance WHERE student_id = ? AND date = ? AND subject = ?', 
-                              (student['id'], today, session['subject'])).fetchone()
+                              (student['id'], today, teacher_subject)).fetchone()
         if not exists:
             conn.execute('INSERT INTO attendance (date, student_id, subject, status) VALUES (?, ?, ?, ?)', 
-                         (today, student['id'], session['subject'], 'Present'))
+                         (today, student['id'], teacher_subject, 'Present'))
             
     conn.commit()
     conn.close()
