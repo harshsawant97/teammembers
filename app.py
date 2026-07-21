@@ -7,9 +7,29 @@ import base64
 import datetime
 import csv
 import json
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key'
+
+UPLOAD_FOLDER = 'static/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+models_dir = os.path.join('static', 'models')
+yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
+sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
+
+global_detector = None
+global_recognizer = None
+
+def get_ai_models():
+    global global_detector, global_recognizer
+    if global_detector is None or global_recognizer is None:
+        if os.path.exists(yunet_path) and os.path.exists(sface_path):
+            global_detector = cv2.FaceDetectorYN.create(yunet_path, "", (320, 320))
+            global_recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+    return global_detector, global_recognizer
 
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -326,21 +346,15 @@ def register_face():
     with open(temp_path, "wb") as fh:
         fh.write(nparr)
         
-    import cv2
-    import numpy as np
-    
-    models_dir = os.path.join('static', 'models')
-    yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
-    sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
-    
     success = False
     
-    if os.path.exists(yunet_path) and os.path.exists(sface_path):
+    detector, recognizer = get_ai_models()
+    
+    if detector is not None and recognizer is not None:
         s_img = cv2.imread(temp_path)
         if s_img is not None:
             height, width, _ = s_img.shape
-            detector = cv2.FaceDetectorYN.create(yunet_path, "", (width, height))
-            recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+            detector.setInputSize((width, height))
             
             _, s_faces = detector.detect(s_img)
             if s_faces is not None and len(s_faces) > 0:
@@ -385,19 +399,13 @@ def mark_attendance():
     
     recognized_students = []
     
-    import cv2
-    import numpy as np
+    detector, recognizer = get_ai_models()
     
-    models_dir = os.path.join('static', 'models')
-    yunet_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
-    sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
-    
-    if os.path.exists(yunet_path) and os.path.exists(sface_path):
+    if detector is not None and recognizer is not None:
         img = cv2.imread(temp_path)
         if img is not None:
             height, width, _ = img.shape
-            detector = cv2.FaceDetectorYN.create(yunet_path, "", (width, height))
-            recognizer = cv2.FaceRecognizerSF.create(sface_path, "")
+            detector.setInputSize((width, height))
             
             _, faces = detector.detect(img)
             faces_in_classroom = faces if faces is not None else []
