@@ -212,7 +212,7 @@ def teacher_dashboard():
     selected_date = request.args.get('date', datetime.date.today().strftime("%Y-%m-%d"))
     
     # Get all students
-    all_students = conn.execute('SELECT id, username FROM users WHERE role = "student"').fetchall()
+    all_students = conn.execute("SELECT id, username FROM users WHERE role = 'student'").fetchall()
     
     # Get attendance for selected date
     attendance_records = conn.execute('''
@@ -277,7 +277,7 @@ def export_csv():
     selected_date = request.args.get('date', datetime.date.today().strftime("%Y-%m-%d"))
     
     conn = get_db_connection()
-    all_students = conn.execute('SELECT id, username FROM users WHERE role = "student"').fetchall()
+    all_students = conn.execute("SELECT id, username FROM users WHERE role = 'student'").fetchall()
     attendance_records = conn.execute('SELECT student_id, status FROM attendance WHERE date = ? AND subject = ?', (selected_date, subject)).fetchall()
     conn.close()
     
@@ -364,7 +364,7 @@ def register_face():
                 
                 # --- ANTI-FRAUD CHECK ---
                 conn = get_db_connection()
-                existing_users = conn.execute('SELECT id, face_features FROM users WHERE role = "student" AND face_features IS NOT NULL AND id != ?', (session['user_id'],)).fetchall()
+                existing_users = conn.execute("SELECT id, face_features FROM users WHERE role = 'student' AND face_features IS NOT NULL AND id != ?", (session['user_id'],)).fetchall()
                 
                 duplicate_found = False
                 for user in existing_users:
@@ -413,7 +413,7 @@ def mark_attendance():
         fh.write(nparr)
         
     conn = get_db_connection()
-    students = conn.execute('SELECT id, face_features, username FROM users WHERE role = "student" AND face_features IS NOT NULL').fetchall()
+    students = conn.execute("SELECT id, face_features, username FROM users WHERE role = 'student' AND face_features IS NOT NULL").fetchall()
     
     recognized_students = []
     
