@@ -362,10 +362,28 @@ def register_face():
                 s_aligned = recognizer.alignCrop(s_img, s_face)
                 s_feature = recognizer.feature(s_aligned)
                 
+                # --- ANTI-FRAUD CHECK ---
+                conn = get_db_connection()
+                existing_users = conn.execute('SELECT id, face_features FROM users WHERE role = "student" AND face_features IS NOT NULL AND id != ?', (session['user_id'],)).fetchall()
+                
+                duplicate_found = False
+                for user in existing_users:
+                    existing_feature = np.array(json.loads(user['face_features']), dtype=np.float32)
+                    score = recognizer.match(s_feature, existing_feature, cv2.FaceRecognizerSF_FR_COSINE)
+                    if score >= 0.363:
+                        duplicate_found = True
+                        break
+                        
+                if duplicate_found:
+                    conn.close()
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    return jsonify({'success': False, 'message': 'Anti-Fraud Alert: This face is already registered to another student account!'})
+                # ------------------------
+                
                 # Turn math features into a string for the database!
                 feature_json = json.dumps(s_feature.tolist())
                 
-                conn = get_db_connection()
                 conn.execute('UPDATE users SET face_features = ? WHERE id = ?', (feature_json, session['user_id']))
                 conn.commit()
                 conn.close()
