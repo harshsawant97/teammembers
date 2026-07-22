@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* Premium animated mesh gradient background (Dark Mode) */
+  background: linear-gradient(-45deg, #0f172a, #1e1b4b, #312e81, #1e1b4b);
+  background-size: 400% 400%;
+  animation: gradient 15s ease infinite;
+  color: #e2e8f0;
+  transition: background 0.5s ease, color 0.5s ease;
+}
+
+body.light-mode {
+  background: linear-gradient(-45deg, #f8fafc, #e2e8f0, #cbd5e1, #e2e8f0);
+  color: #0f172a;
+}
+
+body.light-mode .text-white { color: #0f172a !important; }
+body.light-mode .text-indigo-200 { color: #334155 !important; }
+body.light-mode .glass-panel, body.light-mode .glass-card, body.light-mode .glass-stat {
+  background-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Glassmorphism Utilities */
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(31,38,135,0.37)];
+  }
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 shadow-xl transition-all duration-500 hover:bg-white/20 hover:-translate-y-2 hover:shadow-[0_8px_32px_0_rgba(79,70,229,0.3)];
+  }
+  .glass-button {
+    @apply bg-white/10 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300 active:scale-95 hover:shadow-indigo-500/50;
+  }
+  .glass-stat {
+    @apply relative overflow-hidden bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg border border-white/20 rounded-3xl p-6 shadow-xl transition-all duration-300 hover:border-indigo-400/50;
+  }
+  .glass-stat::before {
+    content: '';
+    @apply absolute top-0 left-[-100%] w-1/2 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent transform skew-x-[-20deg] transition-all duration-700;
+  }
+  .glass-stat:hover::before {
+    @apply left-[200%];
+  }
+}

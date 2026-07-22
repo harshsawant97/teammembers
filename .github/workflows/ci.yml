@@ -1,0 +1,47 @@
+name: Smart Attendance CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+    - run: npm ci
+      working-directory: ./backend
+    - run: npx prisma generate
+      working-directory: ./backend
+    - run: npm run build
+      working-directory: ./backend
+    - run: npm test
+      working-directory: ./backend
+
+  ai-service-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - run: pip install -r requirements.txt
+      working-directory: ./ai-service
+    - run: pytest
+      working-directory: ./ai-service
+
+  docker-build:
+    needs: [backend-test, ai-service-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Docker Images
+      run: docker-compose build
