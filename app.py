@@ -9,6 +9,7 @@ import csv
 import json
 import cv2
 import numpy as np
+import threading
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key'
@@ -22,6 +23,7 @@ sface_path = os.path.join(models_dir, "face_recognition_sface_2021dec.onnx")
 
 global_detector = None
 global_recognizer = None
+ai_lock = threading.Lock()
 
 def get_ai_models():
     global global_detector, global_recognizer
@@ -353,41 +355,49 @@ def register_face():
     if detector is not None and recognizer is not None:
         s_img = cv2.imread(temp_path)
         if s_img is not None:
-            height, width, _ = s_img.shape
-            detector.setInputSize((width, height))
-            
-            _, s_faces = detector.detect(s_img)
-            if s_faces is not None and len(s_faces) > 0:
-                s_face = s_faces[0]
-                s_aligned = recognizer.alignCrop(s_img, s_face)
-                s_feature = recognizer.feature(s_aligned)
+            # Resize image to prevent Memory OOM on free servers
+            height, width = s_img.shape[:2]
+            max_width = 800
+            if width > max_width:
+                scale = max_width / width
+                s_img = cv2.resize(s_img, (max_width, int(height * scale)))
+                height, width = s_img.shape[:2]
                 
-                # --- ANTI-FRAUD CHECK ---
-                conn = get_db_connection()
-                existing_users = conn.execute("SELECT id, face_features FROM users WHERE role = 'student' AND face_features IS NOT NULL AND id != ?", (session['user_id'],)).fetchall()
+            with ai_lock:
+                detector.setInputSize((width, height))
                 
-                duplicate_found = False
-                for user in existing_users:
-                    existing_feature = np.array(json.loads(user['face_features']), dtype=np.float32)
-                    score = recognizer.match(s_feature, existing_feature, cv2.FaceRecognizerSF_FR_COSINE)
-                    if score >= 0.363:
-                        duplicate_found = True
-                        break
-                        
-                if duplicate_found:
+                _, s_faces = detector.detect(s_img)
+                if s_faces is not None and len(s_faces) > 0:
+                    s_face = s_faces[0]
+                    s_aligned = recognizer.alignCrop(s_img, s_face)
+                    s_feature = recognizer.feature(s_aligned)
+                    
+                    # --- ANTI-FRAUD CHECK ---
+                    conn = get_db_connection()
+                    existing_users = conn.execute("SELECT id, face_features FROM users WHERE role = 'student' AND face_features IS NOT NULL AND id != ?", (session['user_id'],)).fetchall()
+                    
+                    duplicate_found = False
+                    for user in existing_users:
+                        existing_feature = np.array(json.loads(user['face_features']), dtype=np.float32)
+                        score = recognizer.match(s_feature, existing_feature, cv2.FaceRecognizerSF_FR_COSINE)
+                        if score >= 0.363:
+                            duplicate_found = True
+                            break
+                            
+                    if duplicate_found:
+                        conn.close()
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        return jsonify({'success': False, 'message': 'Anti-Fraud Alert: This face is already registered to another student account!'})
+                    # ------------------------
+                    
+                    # Turn math features into a string for the database!
+                    feature_json = json.dumps(s_feature.tolist())
+                    
+                    conn.execute('UPDATE users SET face_features = ? WHERE id = ?', (feature_json, session['user_id']))
+                    conn.commit()
                     conn.close()
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                    return jsonify({'success': False, 'message': 'Anti-Fraud Alert: This face is already registered to another student account!'})
-                # ------------------------
-                
-                # Turn math features into a string for the database!
-                feature_json = json.dumps(s_feature.tolist())
-                
-                conn.execute('UPDATE users SET face_features = ? WHERE id = ?', (feature_json, session['user_id']))
-                conn.commit()
-                conn.close()
-                success = True
+                    success = True
 
     if os.path.exists(temp_path):
         os.remove(temp_path)
@@ -422,33 +432,41 @@ def mark_attendance():
     if detector is not None and recognizer is not None:
         img = cv2.imread(temp_path)
         if img is not None:
-            height, width, _ = img.shape
-            detector.setInputSize((width, height))
-            
-            _, faces = detector.detect(img)
-            faces_in_classroom = faces if faces is not None else []
-            
-            for student in students:
-                match_found = False
+            # Resize classroom image to prevent Memory OOM
+            height, width = img.shape[:2]
+            max_width = 1280
+            if width > max_width:
+                scale = max_width / width
+                img = cv2.resize(img, (max_width, int(height * scale)))
+                height, width = img.shape[:2]
                 
-                # Convert the saved JSON string back into the 128-D math array
-                s_feature_list = json.loads(student['face_features'])
-                s_feature = np.array(s_feature_list, dtype=np.float32)
+            with ai_lock:
+                detector.setInputSize((width, height))
                 
-                detector.setInputSize((width, height)) # reset for classroom faces
+                _, faces = detector.detect(img)
+                faces_in_classroom = faces if faces is not None else []
                 
-                for c_face in faces_in_classroom:
-                    c_aligned = recognizer.alignCrop(img, c_face)
-                    c_feature = recognizer.feature(c_aligned)
+                for student in students:
+                    match_found = False
                     
-                    # Calculate cosine similarity (1.0 is exact match, >= 0.363 is same person)
-                    score = recognizer.match(s_feature, c_feature, cv2.FaceRecognizerSF_FR_COSINE)
-                    if score >= 0.363:
-                        match_found = True
-                        break
+                    # Convert the saved JSON string back into the 128-D math array
+                    s_feature_list = json.loads(student['face_features'])
+                    s_feature = np.array(s_feature_list, dtype=np.float32)
+                    
+                    detector.setInputSize((width, height)) # reset for classroom faces
+                    
+                    for c_face in faces_in_classroom:
+                        c_aligned = recognizer.alignCrop(img, c_face)
+                        c_feature = recognizer.feature(c_aligned)
                         
-                if match_found and not any(rs['id'] == student['id'] for rs in recognized_students):
-                    recognized_students.append(student)
+                        # Calculate cosine similarity (1.0 is exact match, >= 0.363 is same person)
+                        score = recognizer.match(s_feature, c_feature, cv2.FaceRecognizerSF_FR_COSINE)
+                        if score >= 0.363:
+                            match_found = True
+                            break
+                            
+                    if match_found and not any(rs['id'] == student['id'] for rs in recognized_students):
+                        recognized_students.append(student)
             
     teacher_subject = session.get('subject') or "General"
             
