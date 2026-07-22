@@ -187,6 +187,8 @@ def delete_user(id):
         return redirect(url_for('login'))
         
     conn = get_db_connection()
+    # Fix Postgres Foreign Key Error: Must delete attendance records first!
+    conn.execute('DELETE FROM attendance WHERE student_id = ?', (id,))
     conn.execute('DELETE FROM users WHERE id = ?', (id,))
     conn.commit()
     conn.close()
