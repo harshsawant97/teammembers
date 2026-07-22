@@ -1,8 +1,0 @@
-numpy<2.0.0
-Flask
-Werkzeug
-opencv-python-headless
-gunicorn
-Flask-Mail
-python-dotenv
-psycopg2-binary
