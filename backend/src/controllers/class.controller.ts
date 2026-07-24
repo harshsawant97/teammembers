@@ -9,7 +9,7 @@ export const getClasses = async (req: Request, res: Response) => {
     const classesRef = db.collection('classes');
     let snapshot;
     
-    if (role === 'ADMIN') {
+    if (role === 'ADMIN' || role === 'STUDENT') {
       snapshot = await classesRef.get();
     } else {
       snapshot = await classesRef.where('facultyId', '==', userId).get();

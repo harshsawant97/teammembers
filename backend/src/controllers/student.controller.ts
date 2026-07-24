@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { db } from '../utils/firebase';
+import { createNotification } from './notification.controller';
 
 export const registerStudent = async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, enrollmentNo, email, departmentName, descriptor } = req.body;
+    const { firstName, lastName, enrollmentNo, email, phoneNo, departmentName, descriptor, gender } = req.body;
 
-    if (!firstName || !lastName || !enrollmentNo || !email || !descriptor) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!firstName || !lastName || !email || !phoneNo || !descriptor) {
+      return res.status(400).json({ error: 'Missing required fields: firstName, lastName, email, phoneNo, descriptor' });
     }
 
     const deptName = departmentName ? departmentName.trim() : 'Computer Science';
@@ -41,10 +42,12 @@ export const registerStudent = async (req: Request, res: Response) => {
     const studentData = {
       firstName,
       lastName,
-      enrollmentNo,
+      enrollmentNo: enrollmentNo || '',
       email: email.toLowerCase(),
+      phoneNo,
       departmentId: deptId,
       departmentName: deptName, // Denormalize for easy querying
+      gender: gender || 'Not Specified',
       createdAt: new Date().toISOString(),
       descriptors: [JSON.stringify(descriptor)]
     };
@@ -101,13 +104,21 @@ export const getEmbeddings = async (req: Request, res: Response) => {
 export const updateStudent = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, enrollmentNo, email } = req.body;
+    const { firstName, lastName, enrollmentNo, email, phoneNo } = req.body;
 
     await db.collection('students').doc(id).update({
-      firstName, lastName, enrollmentNo, email: email?.toLowerCase()
+      firstName, lastName, enrollmentNo, email: email?.toLowerCase(), phoneNo
     });
 
-    res.json({ message: 'Student updated successfully', student: { id, firstName, lastName, enrollmentNo } });
+    // Create a notification for the faculty
+    await createNotification(
+      'FACULTY', 
+      'Student Profile Updated', 
+      `Student ${firstName} ${lastName} (${enrollmentNo}) has updated their profile details.`,
+      'STUDENT_UPDATE'
+    );
+
+    res.json({ message: 'Student updated successfully', student: { id, firstName, lastName, enrollmentNo, phoneNo } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

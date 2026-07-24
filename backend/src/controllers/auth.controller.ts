@@ -13,6 +13,7 @@ export const firebaseLogin = async (req: Request, res: Response): Promise<void> 
 
     // Verify token with Firebase Admin
     const decodedToken = await firebaseAdminAuth.verifyIdToken(token);
+    const uid = decodedToken.uid;
     const email = decodedToken.email;
     const emailVerified = decodedToken.email_verified;
 
@@ -31,24 +32,57 @@ export const firebaseLogin = async (req: Request, res: Response): Promise<void> 
     
     if (requestedRole === 'STUDENT') {
       const studentsRef = db.collection('students');
-      const studentSnap = await studentsRef.where('email', '==', email.toLowerCase()).limit(1).get();
+      
+      // 1. Try to find by UID first (if they already linked their account)
+      let studentSnap = await studentsRef.where('uid', '==', uid).limit(1).get();
+      
+      // 2. Fallback to Email (for first time login, or if UID wasn't linked yet)
+      if (studentSnap.empty) {
+        studentSnap = await studentsRef.where('email', '==', email.toLowerCase()).limit(1).get();
+      }
       
       if (studentSnap.empty) {
         res.status(401).json({ message: 'Your email is not registered as a student. Contact your administrator.' });
         return;
       }
+      
       studentId = studentSnap.docs[0].id;
+      const studentData = studentSnap.docs[0].data();
+      
+      const updates: any = {};
+      
+      // Link the UID if it's missing
+      if (studentData.uid !== uid) {
+        updates.uid = uid;
+      }
+      
+      // Auto-sync the email if the Firebase Auth email changed (after verification)
+      if (studentData.email !== email.toLowerCase()) {
+        updates.email = email.toLowerCase();
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await studentsRef.doc(studentId).update(updates);
+      }
     }
 
     // Find or create user in Firestore
     const usersRef = db.collection('users');
-    const snapshot = await usersRef.where('email', '==', email.toLowerCase()).limit(1).get();
+    let snapshot = await usersRef.where('uid', '==', uid).limit(1).get();
+    
+    // Fallback to email for legacy users
+    if (snapshot.empty) {
+      snapshot = await usersRef.where('email', '==', email.toLowerCase()).limit(1).get();
+    }
     
     let user;
     if (snapshot.empty) {
+      // Prevent automatic registration of faculty accounts if it's supposed to be restricted,
+      // but for now we'll just respect the creation but ensure we don't allow role hopping later.
       const newUserRef = usersRef.doc();
       user = {
         id: newUserRef.id,
+        uid: uid,
         email: email.toLowerCase(),
         role: requestedRole,
         studentId, // Will be null for FACULTY
@@ -59,11 +93,24 @@ export const firebaseLogin = async (req: Request, res: Response): Promise<void> 
       const doc = snapshot.docs[0];
       user = { id: doc.id, ...doc.data() };
       
-      // Update role/studentId if they changed
-      if (user.role !== requestedRole || user.studentId !== studentId) {
-        user.role = requestedRole;
-        user.studentId = studentId;
-        await doc.ref.update({ role: requestedRole, studentId });
+      // CRITICAL SECURITY FIX: Prevent cross-role login
+      if (user.role && user.role !== requestedRole) {
+        res.status(403).json({ 
+          message: `Access denied. You are trying to log in as ${requestedRole === 'FACULTY' ? 'Admin/Faculty' : 'Student'}, but your account is registered as ${user.role === 'FACULTY' ? 'Admin/Faculty' : 'Student'}. Please use the correct login portal.` 
+        });
+        return;
+      }
+      
+      const userUpdates: any = {};
+      
+      if (user.uid !== uid) userUpdates.uid = uid;
+      if (user.email !== email.toLowerCase()) userUpdates.email = email.toLowerCase();
+      // if (user.role !== requestedRole) userUpdates.role = requestedRole; // REMOVED to prevent privilege escalation
+      if (user.studentId !== studentId) userUpdates.studentId = studentId;
+
+      if (Object.keys(userUpdates).length > 0) {
+        Object.assign(user, userUpdates);
+        await doc.ref.update(userUpdates);
       }
     }
 
