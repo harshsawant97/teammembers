@@ -2,10 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Box, Typography, CircularProgress, Alert, Grid, Chip } from '@mui/material';
 import { History, Class as ClassIcon, AccessTime, ArrowBackIosNew } from '@mui/icons-material';
 import axios from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
+
+const rowVariants = {
+  hidden: { opacity: 0, y: 20, filter: 'blur(10px)' },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { type: 'spring' as const, stiffness: 300, damping: 24 } }
+};
 
 interface Attendance {
   id: string;
   student: {
+    id: string;
     firstName: string;
     lastName: string;
     enrollmentNo: string;
@@ -48,6 +60,7 @@ export const ClassHistory: React.FC = () => {
   const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<GroupedClass | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [filterDate, setFilterDate] = useState<string>('');
 
   useEffect(() => {
     const fetchSessions = async () => {
@@ -117,6 +130,7 @@ export const ClassHistory: React.FC = () => {
   const handleBackToClasses = () => {
     setSelectedClass(null);
     setSelectedSession(null);
+    setFilterDate('');
   };
 
   const handleBackToSessions = () => {
@@ -135,9 +149,10 @@ export const ClassHistory: React.FC = () => {
     <Box className="p-4 md:p-8 min-h-screen relative overflow-hidden">
       <Box className="absolute top-[10%] left-[20%] w-[30rem] h-[30rem] bg-indigo-600/20 rounded-full blur-[100px] mix-blend-screen pointer-events-none" />
       
-      <Grid container spacing={4} className="relative z-10">
-        <Grid item xs={12}>
-          <Box className="glass-panel rounded-[2rem] p-8 flex justify-between items-center">
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="relative z-10">
+        <Grid container spacing={4}>
+          <Grid item xs={12}>
+            <motion.div variants={rowVariants} className="glass-panel rounded-[2rem] p-8 flex justify-between items-center bg-white/5 backdrop-blur-md shadow-2xl border border-white/10">
             <Box>
               <Typography variant="h3" className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200 tracking-tight flex items-center gap-4">
                 <History fontSize="large" className="text-indigo-400" />
@@ -175,7 +190,7 @@ export const ClassHistory: React.FC = () => {
                 </select>
               </Box>
             ) : null}
-          </Box>
+          </motion.div>
         </Grid>
 
         {error && (
@@ -185,7 +200,7 @@ export const ClassHistory: React.FC = () => {
         )}
 
         <Grid item xs={12}>
-          <Box className="glass-panel rounded-[2rem] p-8 min-h-[500px]">
+          <motion.div variants={rowVariants} className="glass-panel rounded-[2rem] p-8 min-h-[500px] bg-white/5 border border-white/10">
             
             {/* LEVEL 1: SHOW ALL CLASSES FOR SELECTED SEMESTER */}
             {!selectedClass && (
@@ -194,9 +209,10 @@ export const ClassHistory: React.FC = () => {
                   <Grid container spacing={3}>
                     {groupedClasses.filter(c => c.semester === selectedSemester).map(cls => (
                       <Grid item xs={12} md={4} key={cls.classId}>
-                        <Box 
+                        <motion.div 
+                          variants={rowVariants}
                           onClick={() => setSelectedClass(cls)}
-                          className="glass-panel rounded-xl p-6 cursor-pointer transition-all duration-300 transform hover:scale-[1.03] border border-white/10 hover:border-indigo-400 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                          className="glass-card rounded-xl p-6 cursor-pointer"
                         >
                           <Typography variant="h6" className="text-white font-bold flex items-center gap-2 mb-2">
                             <ClassIcon className="text-indigo-400" />
@@ -207,9 +223,9 @@ export const ClassHistory: React.FC = () => {
                           </Typography>
                           <Chip 
                             label={`${cls.sessions.length} Session${cls.sessions.length !== 1 ? 's' : ''}`} 
-                            className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold"
+                            className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold shadow-lg"
                           />
-                        </Box>
+                        </motion.div>
                       </Grid>
                     ))}
                   </Grid>
@@ -221,14 +237,37 @@ export const ClassHistory: React.FC = () => {
 
             {/* LEVEL 2: SHOW SESSIONS FOR SELECTED CLASS */}
             {selectedClass && !selectedSession && (
-              <Grid container spacing={3}>
-                {selectedClass.sessions.map(session => {
-                  const timeInfo = formatTimeSlot(session.startTime, session.endTime);
+              <Box>
+                <Box className="flex justify-between items-center mb-6">
+                  <Typography variant="h6" className="text-white font-bold">Sessions</Typography>
+                  <Box className="flex items-center gap-2">
+                    <input 
+                      type="date" 
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      className="bg-black/40 text-white font-bold px-4 py-2 rounded-xl border border-white/20 focus:outline-none focus:border-indigo-400"
+                    />
+                    {filterDate && (
+                      <Typography 
+                        className="text-indigo-300 cursor-pointer text-sm font-bold hover:text-white" 
+                        onClick={() => setFilterDate('')}
+                      >
+                        Clear
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+                <Grid container spacing={3}>
+                  {selectedClass.sessions
+                    .filter(session => !filterDate || new Date(session.startTime).toLocaleDateString('en-CA') === filterDate)
+                    .map(session => {
+                      const timeInfo = formatTimeSlot(session.startTime, session.endTime);
                   return (
                     <Grid item xs={12} md={6} key={session.id}>
-                      <Box 
+                      <motion.div 
+                        variants={rowVariants}
                         onClick={() => setSelectedSession(session)}
-                        className="glass-panel rounded-xl p-6 cursor-pointer transition-all duration-300 transform hover:scale-[1.02] border border-white/10 hover:border-teal-400 hover:shadow-[0_0_20px_rgba(45,212,191,0.2)]"
+                        className="glass-card rounded-xl p-6 cursor-pointer"
                       >
                         <Box className="flex justify-between items-start mb-4">
                           <Typography variant="h6" className="text-white font-bold">
@@ -249,11 +288,15 @@ export const ClassHistory: React.FC = () => {
                         <Typography className="text-slate-400 mt-4 text-sm font-medium">
                           {session.attendance.length} Students Attended
                         </Typography>
-                      </Box>
+                      </motion.div>
                     </Grid>
                   );
                 })}
+                {selectedClass.sessions.filter(session => !filterDate || new Date(session.startTime).toLocaleDateString('en-CA') === filterDate).length === 0 && (
+                  <Typography className="text-slate-400 italic w-full text-center p-8">No sessions found for this date.</Typography>
+                )}
               </Grid>
+              </Box>
             )}
 
             {/* LEVEL 3: SHOW ATTENDANCE FOR SELECTED SESSION */}
@@ -296,7 +339,13 @@ export const ClassHistory: React.FC = () => {
                         {Array.from(new Map(selectedSession.attendance.map(a => [a.student?.id, a])).values()).map(att => {
                           if (!att.student) return null;
                           return (
-                            <tr key={att.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <motion.tr 
+                              variants={rowVariants}
+                              initial="hidden"
+                              animate="show"
+                              key={att.id} 
+                              className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                            >
                               <td className="p-4 text-white font-medium flex items-center gap-3">
                                 <Box className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-xs shadow-inner">
                                   {att.student.firstName?.[0]}{att.student.lastName?.[0]}
@@ -312,7 +361,7 @@ export const ClassHistory: React.FC = () => {
                                   className="bg-green-500/20 text-green-300 border border-green-500/30 font-bold"
                                 />
                               </td>
-                            </tr>
+                            </motion.tr>
                           );
                         })}
 
@@ -320,7 +369,13 @@ export const ClassHistory: React.FC = () => {
                         {allStudents
                           .filter(s => !new Set(selectedSession.attendance.map(a => a.student?.id)).has(s.id))
                           .map(student => (
-                            <tr key={`absent-${student.id}`} className="border-b border-white/5 hover:bg-white/5 transition-colors opacity-60">
+                            <motion.tr 
+                              variants={rowVariants}
+                              initial="hidden"
+                              animate="show"
+                              key={`absent-${student.id}`} 
+                              className="border-b border-white/5 hover:bg-white/5 transition-colors opacity-60"
+                            >
                               <td className="p-4 text-white font-medium flex items-center gap-3">
                                 <Box className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500/50 to-red-600/50 flex items-center justify-center font-bold text-xs shadow-inner">
                                   {student.firstName[0]}{student.lastName[0]}
@@ -336,7 +391,7 @@ export const ClassHistory: React.FC = () => {
                                   className="bg-red-500/20 text-red-300 border border-red-500/30 font-bold"
                                 />
                               </td>
-                            </tr>
+                            </motion.tr>
                           ))
                         }
                       </tbody>
@@ -352,9 +407,10 @@ export const ClassHistory: React.FC = () => {
               </Box>
             )}
 
-          </Box>
+          </motion.div>
         </Grid>
       </Grid>
+      </motion.div>
     </Box>
   );
 };

@@ -4,6 +4,22 @@ import { io, Socket } from 'socket.io-client';
 import { PlayArrow, Pause, Stop, CheckCircle, Warning, Timeline, PeopleAlt, Assessment, CameraAlt } from '@mui/icons-material';
 import axios from 'axios';
 import * as faceapi from 'face-api.js';
+import { motion, animate, useMotionValue, useTransform } from 'framer-motion';
+import { PageWrapper } from './PageWrapper';
+import { LegendaryCard } from './LegendaryCard';
+
+const AnimatedNumber = ({ value, suffix = '' }: { value: number, suffix?: string }) => {
+  const count = useMotionValue(0);
+  const rounded = useTransform(count, Math.round);
+  const display = useTransform(rounded, (latest) => `${latest}${suffix}`);
+
+  useEffect(() => {
+    const animation = animate(count, value, { duration: 2, type: 'spring', bounce: 0.1 });
+    return animation.stop;
+  }, [value]);
+
+  return <motion.span>{display}</motion.span>;
+};
 
 interface Student {
   id: string;
@@ -274,16 +290,29 @@ export const FacultyDashboard: React.FC = () => {
   const uniqueSemesters = Array.from(new Set(classes.map(c => c.semester)));
   const filteredClasses = classes.filter(c => c.semester === selectedSemester);
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.15 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 24 } }
+  };
+
   return (
-    <Box className="p-4 md:p-8 min-h-screen relative overflow-hidden">
+    <PageWrapper className="p-4 md:p-8 min-h-screen relative overflow-hidden">
       <Box className="absolute top-[-10%] right-[-5%] w-[30rem] h-[30rem] bg-indigo-600/20 rounded-full blur-[100px] mix-blend-screen pointer-events-none" />
       <Box className="absolute bottom-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-teal-500/10 rounded-full blur-[120px] mix-blend-screen pointer-events-none" />
 
-      <Grid container spacing={4} className="relative z-10">
-        
-        {/* Header Section */}
-        <Grid item xs={12}>
-          <Box className="flex flex-col md:flex-row justify-between items-start md:items-center glass-panel rounded-[2rem] p-8 border-t border-l border-white/30">
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="relative z-10 max-w-7xl mx-auto">
+        <Grid container spacing={4}>
+          
+          <Grid item xs={12}>
+            <LegendaryCard className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center">
             <Box>
               <Typography variant="h3" className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200 mb-4 tracking-tight">
                 Dashboard
@@ -342,36 +371,36 @@ export const FacultyDashboard: React.FC = () => {
                 variant="outlined"
               />
             </Box>
-          </Box>
-        </Grid>
+            </LegendaryCard>
+          </Grid>
 
-        {/* Quick Stats */}
-        <Grid item xs={12} md={4}>
-          <Box className="glass-stat h-full flex flex-col justify-center items-center text-center">
-            <PeopleAlt className="text-indigo-400 text-5xl mb-3 opacity-80" />
-            <Typography variant="h2" className="font-black text-white">{presentCount} <span className="text-2xl text-indigo-200 font-medium">/ {totalStudents}</span></Typography>
-            <Typography variant="subtitle1" className="text-indigo-200 font-medium mt-1">Students Present</Typography>
-          </Box>
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Box className="glass-stat h-full flex flex-col justify-center p-6">
+          {/* Quick Stats */}
+          <Grid item xs={12} md={4}>
+            <LegendaryCard className="h-full flex flex-col justify-center items-center text-center p-6">
+            <PeopleAlt className="text-indigo-400 text-5xl mb-3 opacity-80 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
+            <Typography variant="h2" className="font-black text-white"><AnimatedNumber value={presentCount} /> <span className="text-2xl text-indigo-200 font-medium">/ <AnimatedNumber value={totalStudents} /></span></Typography>
+            <Typography variant="subtitle1" className="text-indigo-200 font-medium mt-1 uppercase tracking-widest text-xs">Students Present</Typography>
+            </LegendaryCard>
+          </Grid>
+          
+          <Grid item xs={12} md={4}>
+            <LegendaryCard className="h-full flex flex-col justify-center p-6">
             <Box className="flex justify-between items-center mb-4">
-              <Typography variant="subtitle1" className="text-indigo-200 font-medium">Attendance Rate</Typography>
-              <Assessment className="text-teal-400 opacity-80" />
+              <Typography variant="subtitle1" className="text-indigo-200 font-medium uppercase tracking-widest text-xs">Attendance Rate</Typography>
+              <Assessment className="text-teal-400 opacity-80 drop-shadow-[0_0_15px_rgba(45,212,191,0.5)]" />
             </Box>
-            <Typography variant="h3" className="font-black text-white mb-4">{attendanceRate}%</Typography>
+            <Typography variant="h3" className="font-black text-white mb-4"><AnimatedNumber value={attendanceRate} suffix="%" /></Typography>
             <LinearProgress 
               variant="determinate" 
               value={attendanceRate} 
               sx={{ height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.1)', '& .MuiLinearProgress-bar': { backgroundImage: 'linear-gradient(to right, #2dd4bf, #818cf8)' } }} 
             />
-          </Box>
-        </Grid>
+            </LegendaryCard>
+          </Grid>
 
-        {/* Controls Panel */}
-        <Grid item xs={12} md={4}>
-          <Box className="glass-panel rounded-[2rem] p-6 h-full flex flex-col justify-center gap-4">
+          {/* Controls Panel */}
+          <Grid item xs={12} md={4}>
+            <LegendaryCard className="p-6 h-full flex flex-col justify-center gap-4">
             <Button 
               variant="contained" 
               startIcon={<PlayArrow />}
@@ -390,12 +419,12 @@ export const FacultyDashboard: React.FC = () => {
             >
               End Session
             </Button>
-          </Box>
-        </Grid>
+            </LegendaryCard>
+          </Grid>
 
-        {/* Live Camera Feed */}
-        <Grid item xs={12} md={6}>
-          <Box className="glass-panel rounded-[2rem] p-6 min-h-[400px] flex flex-col items-center justify-center relative overflow-hidden">
+          {/* Live Camera Feed */}
+          <Grid item xs={12} md={6}>
+            <LegendaryCard className="p-6 min-h-[400px] flex flex-col items-center justify-center relative overflow-hidden">
             <Typography variant="h6" className="font-bold text-white mb-4 w-full text-left flex items-center gap-2">
               <CameraAlt className="text-teal-400" /> Live Vision
             </Typography>
@@ -418,12 +447,12 @@ export const FacultyDashboard: React.FC = () => {
                 </Box>
               )}
             </Box>
-          </Box>
-        </Grid>
+            </LegendaryCard>
+          </Grid>
 
-        {/* Live Attendance Grid */}
-        <Grid item xs={12} md={6}>
-          <Box className="glass-panel rounded-[2rem] p-6 h-[400px] overflow-y-auto custom-scrollbar">
+          {/* Live Attendance Grid */}
+          <Grid item xs={12} md={6}>
+            <LegendaryCard className="p-6 h-[400px] overflow-y-auto custom-scrollbar">
             <Typography variant="h6" className="font-bold text-white mb-6 flex items-center gap-2">
               <CheckCircle className="text-emerald-400" /> Verified Today
             </Typography>
@@ -433,29 +462,37 @@ export const FacultyDashboard: React.FC = () => {
             ) : (
               <Box className="flex flex-col gap-3">
                 {attendanceList.map((student) => (
-                  <Box key={student.id} className="glass-card flex items-center p-4 rounded-xl border border-white/10">
-                    <Avatar className="bg-gradient-to-br from-teal-400 to-indigo-500 font-bold border border-white/20">
+                  <motion.div 
+                    key={student.id} 
+                    initial={{ opacity: 0, x: -50, filter: 'blur(10px)' }}
+                    animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    whileHover={{ scale: 1.02, x: 5 }}
+                    className="glass-card flex items-center p-4 rounded-xl border border-white/10"
+                  >
+                    <Avatar className="bg-gradient-to-br from-teal-400 to-indigo-500 font-bold border border-white/20 shadow-lg shadow-teal-500/30">
                       {student.name.charAt(0)}
                     </Avatar>
                     <Box className="ml-4 flex-1">
-                      <Typography className="font-bold text-white">{student.name}</Typography>
+                      <Typography className="font-bold text-white tracking-wide">{student.name}</Typography>
                       <LinearProgress 
                         variant="determinate" 
                         value={student.confidence * 100} 
-                        sx={{ mt: 1, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.05)', '& .MuiLinearProgress-bar': { backgroundColor: student.confidence > 0.8 ? '#34d399' : '#fbbf24' } }} 
+                        sx={{ mt: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.05)', '& .MuiLinearProgress-bar': { backgroundColor: student.confidence > 0.8 ? '#34d399' : '#fbbf24', boxShadow: '0 0 10px rgba(52,211,153,0.5)' } }} 
                       />
                     </Box>
-                    <Typography className="text-emerald-400 font-bold ml-4">
+                    <Typography className="text-emerald-400 font-black ml-4 text-lg">
                       {(student.confidence * 100).toFixed(0)}%
                     </Typography>
-                  </Box>
+                  </motion.div>
                 ))}
               </Box>
             )}
-          </Box>
-        </Grid>
+            </LegendaryCard>
+          </Grid>
 
-      </Grid>
-    </Box>
+        </Grid>
+      </motion.div>
+    </PageWrapper>
   );
 };

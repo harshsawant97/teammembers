@@ -1,15 +1,29 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Typography, Grid, TextField, Button, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Grid, TextField, Button, CircularProgress, Alert, MenuItem } from '@mui/material';
 import { CameraAlt, PersonAdd, Save, People as PeopleIcon } from '@mui/icons-material';
 import * as faceapi from 'face-api.js';
 import axios from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const rowVariants = {
+  hidden: { opacity: 0, y: 20, filter: 'blur(10px)' },
+  show: (i: number) => ({
+    opacity: 1, 
+    y: 0, 
+    filter: 'blur(0px)', 
+    transition: { delay: i * 0.05, type: 'spring' as const, stiffness: 300, damping: 24 }
+  })
+};
 
 interface Student {
   id: string;
   firstName: string;
   lastName: string;
   enrollmentNo: string;
+  email: string;
+  phoneNo: string;
   department: { name: string };
+  gender?: string;
 }
 
 export const StudentRegistration: React.FC = () => {
@@ -17,7 +31,9 @@ export const StudentRegistration: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [enrollmentNo, setEnrollmentNo] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNo, setPhoneNo] = useState('');
   const [departmentName, setDepartmentName] = useState('');
+  const [gender, setGender] = useState('');
   
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -105,8 +121,8 @@ export const StudentRegistration: React.FC = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName || !lastName || !enrollmentNo || !email) {
-      setError("Please fill out all fields.");
+    if (!firstName || !lastName || !email || !phoneNo) {
+      setError("Please fill out all required fields (First Name, Last Name, Email, Phone No).");
       return;
     }
 
@@ -140,7 +156,9 @@ export const StudentRegistration: React.FC = () => {
         lastName,
         enrollmentNo,
         email,
+        phoneNo,
         departmentName,
+        gender,
         descriptor: descriptorArray
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -151,7 +169,9 @@ export const StudentRegistration: React.FC = () => {
       setLastName('');
       setEnrollmentNo('');
       setEmail('');
+      setPhoneNo('');
       setDepartmentName('');
+      setGender('');
       fetchStudents(); // Refresh the list after registration
     } catch (err: any) {
       console.error(err);
@@ -190,20 +210,43 @@ export const StudentRegistration: React.FC = () => {
 
             <Box component="form" onSubmit={handleRegister} className="flex flex-col gap-6">
               <TextField 
-                label="First Name" 
+                label="First Name *" 
                 variant="filled" 
                 fullWidth 
+                required
                 value={firstName}
                 onChange={e => setFirstName(e.target.value)}
                 InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
                 InputLabelProps={{ className: "text-indigo-200" }}
               />
               <TextField 
-                label="Last Name" 
+                label="Last Name *" 
                 variant="filled" 
                 fullWidth 
+                required
                 value={lastName}
                 onChange={e => setLastName(e.target.value)}
+                InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
+                InputLabelProps={{ className: "text-indigo-200" }}
+              />
+              <TextField 
+                label="Student Email Address *" 
+                variant="filled" 
+                fullWidth 
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
+                InputLabelProps={{ className: "text-indigo-200" }}
+              />
+              <TextField 
+                label="Phone Number *" 
+                variant="filled" 
+                fullWidth 
+                required
+                value={phoneNo}
+                onChange={e => setPhoneNo(e.target.value)}
                 InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
                 InputLabelProps={{ className: "text-indigo-200" }}
               />
@@ -217,16 +260,6 @@ export const StudentRegistration: React.FC = () => {
                 InputLabelProps={{ className: "text-indigo-200" }}
               />
               <TextField 
-                label="Student Email Address" 
-                variant="filled" 
-                fullWidth 
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
-                InputLabelProps={{ className: "text-indigo-200" }}
-              />
-              <TextField 
                 label="Department (e.g. Computer Science)" 
                 variant="filled" 
                 fullWidth 
@@ -235,6 +268,28 @@ export const StudentRegistration: React.FC = () => {
                 InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
                 InputLabelProps={{ className: "text-indigo-200" }}
               />
+              <TextField
+                select
+                label="Gender *"
+                variant="filled"
+                fullWidth
+                required
+                value={gender}
+                onChange={e => setGender(e.target.value)}
+                InputProps={{ className: "text-white bg-white/5", sx: { borderRadius: 2 } }}
+                InputLabelProps={{ className: "text-indigo-200" }}
+                SelectProps={{
+                  MenuProps: {
+                    PaperProps: {
+                      className: "bg-slate-800 text-white"
+                    }
+                  }
+                }}
+              >
+                <MenuItem value="Male">Male</MenuItem>
+                <MenuItem value="Female">Female</MenuItem>
+                <MenuItem value="Transgender">Transgender</MenuItem>
+              </TextField>
 
               <Button
                 type="submit"
@@ -294,22 +349,37 @@ export const StudentRegistration: React.FC = () => {
                   <thead>
                     <tr className="border-b border-white/10">
                       <th className="p-4 text-indigo-200 font-semibold">Name</th>
+                      <th className="p-4 text-indigo-200 font-semibold">Email</th>
+                      <th className="p-4 text-indigo-200 font-semibold">Phone</th>
+                      <th className="p-4 text-indigo-200 font-semibold">Gender</th>
                       <th className="p-4 text-indigo-200 font-semibold">Enrollment No.</th>
                       <th className="p-4 text-indigo-200 font-semibold">Department</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {studentsList.map(student => (
-                      <tr key={student.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <AnimatePresence>
+                    {studentsList.map((student, i) => (
+                      <motion.tr 
+                        custom={i}
+                        variants={rowVariants}
+                        initial="hidden"
+                        animate="show"
+                        key={student.id} 
+                        className="border-b border-white/5 hover:bg-white/10 transition-colors"
+                      >
                         <td className="p-4 text-white font-medium">{student.firstName} {student.lastName}</td>
-                        <td className="p-4 text-slate-300 font-mono">{student.enrollmentNo}</td>
+                        <td className="p-4 text-slate-300 font-mono text-sm">{student.email}</td>
+                        <td className="p-4 text-slate-300 font-mono text-sm">{student.phoneNo || 'N/A'}</td>
+                        <td className="p-4 text-slate-300 font-mono text-sm">{student.gender || 'Not Specified'}</td>
+                        <td className="p-4 text-slate-300 font-mono text-sm">{student.enrollmentNo || 'N/A'}</td>
                         <td className="p-4 text-slate-300">
                           <span className="bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full text-sm font-medium border border-indigo-500/30">
                             {student.department?.name || 'Unknown'}
                           </span>
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
+                    </AnimatePresence>
                   </tbody>
                 </table>
               </div>

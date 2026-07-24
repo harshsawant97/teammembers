@@ -4,7 +4,11 @@ import { Email, Lock, ArrowForward, Face } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, sendEmailVerification } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
+import { motion } from 'framer-motion';
+import { PageWrapper } from './PageWrapper';
+import { LegendaryCard } from './LegendaryCard';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
@@ -32,6 +36,7 @@ export const LandingPage: React.FC = () => {
     } catch (err: any) {
       console.error('Backend auth error:', err);
       setError(err.response?.data?.message || 'Server authentication failed');
+      auth.signOut(); // Ensure we don't leave them half logged-in in Firebase
     }
   };
 
@@ -95,14 +100,33 @@ export const LandingPage: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first to reset password.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setSuccessMsg('Password reset link has been sent to your email. Please check your inbox.');
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(err.message || 'Failed to send password reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <Box className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden w-full bg-slate-900">
+    <PageWrapper className="min-h-screen bg-slate-900 relative overflow-hidden w-full flex items-center justify-center p-4">
       
       {/* Decorative Orbs for Glassmorphism background effect */}
       <Box className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-indigo-600/30 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
       <Box className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-teal-500/20 rounded-full blur-[100px] mix-blend-screen" />
       
-      <Box className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
         
         {/* Left Side: Hero Text */}
         <Box className="text-left px-4 lg:px-12">
@@ -126,7 +150,7 @@ export const LandingPage: React.FC = () => {
 
         {/* Right Side: Glassmorphism Login Form */}
         <Box className="w-full max-w-md mx-auto">
-          <Box className="glass-panel rounded-3xl p-10 shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] border border-white/20 backdrop-blur-2xl relative bg-white/10">
+          <LegendaryCard className="p-10 relative bg-white/10">
             
             {/* Glossy highlight effect on top edge */}
             <Box className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-50 rounded-t-3xl" />
@@ -216,6 +240,18 @@ export const LandingPage: React.FC = () => {
                 {loading ? <CircularProgress size={24} color="inherit" /> : (isLogin ? 'Sign In to Dashboard' : 'Sign Up')}
               </Button>
 
+              {isLogin && (
+                <Box className="text-right -mt-2">
+                  <Typography 
+                    variant="caption" 
+                    onClick={handleForgotPassword}
+                    className="text-indigo-300 cursor-pointer hover:text-white transition-colors text-sm font-medium"
+                  >
+                    Forgot Password?
+                  </Typography>
+                </Box>
+              )}
+
               <Box className="relative flex py-2 items-center">
                 <Box className="flex-grow border-t border-white/10"></Box>
                 <span className="flex-shrink-0 mx-4 text-indigo-200/50 text-sm">OR</span>
@@ -242,10 +278,10 @@ export const LandingPage: React.FC = () => {
                 </Typography>
               </Box>
             </Box>
-          </Box>
+          </LegendaryCard>
         </Box>
         
-      </Box>
-    </Box>
+      </motion.div>
+    </PageWrapper>
   );
 };

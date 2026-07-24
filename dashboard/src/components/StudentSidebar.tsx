@@ -1,8 +1,10 @@
 import React from 'react';
 import { Box, Typography, List, ListItem, ListItemIcon, ListItemText } from '@mui/material';
-import { Dashboard, Person, Logout, Face, Class as ClassIcon } from '@mui/icons-material';
+import { Dashboard, Person, Logout, Face, Class as ClassIcon, QuestionAnswer } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { motion } from 'framer-motion';
+import { NotificationBell } from './NotificationBell';
 
 export const StudentSidebar: React.FC = () => {
   const navigate = useNavigate();
@@ -12,16 +14,18 @@ export const StudentSidebar: React.FC = () => {
   const menuItems = [
     { text: 'Overview', icon: <Dashboard />, path: '/student/dashboard' },
     { text: 'My Classes', icon: <ClassIcon />, path: '/student/classes' },
+    { text: 'Queries', icon: <QuestionAnswer />, path: '/student/queries' },
     { text: 'My Profile', icon: <Person />, path: '/student/profile' },
   ];
 
   return (
     <Box className="w-64 h-screen bg-slate-900 border-r border-white/10 flex flex-col justify-between py-6 sticky top-0 shrink-0 z-50">
       <Box>
-        <Box className="px-6 mb-10">
-          <Typography variant="h5" className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-indigo-400 flex items-center gap-2">
-            <Face /> Student Portal
+        <Box className="px-6 mb-10 flex justify-between items-center">
+          <Typography variant="h5" className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-indigo-400 flex items-center gap-2 text-xl">
+            <Face /> Portal
           </Typography>
+          <NotificationBell />
         </Box>
         <List className="px-3">
           {menuItems.map((item) => (
@@ -29,18 +33,21 @@ export const StudentSidebar: React.FC = () => {
               button 
               key={item.text} 
               onClick={() => navigate(item.path)}
-              className={`mb-2 rounded-xl transition-all duration-300 cursor-pointer ${
-                location.pathname === item.path 
-                  ? 'bg-gradient-to-r from-teal-500/20 to-transparent border-l-4 border-teal-400' 
-                  : 'hover:bg-white/5 border-l-4 border-transparent'
-              }`}
+              className="relative mb-2 rounded-xl transition-all duration-300 cursor-pointer group"
             >
-              <ListItemIcon className={`${location.pathname === item.path ? 'text-teal-400' : 'text-slate-400'}`}>
+              {location.pathname === item.path && (
+                <motion.div
+                  layoutId="student-sidebar-active"
+                  className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-transparent border-l-4 border-teal-400 rounded-xl"
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                />
+              )}
+              <ListItemIcon className={`relative z-10 ${location.pathname === item.path ? 'text-teal-400' : 'text-slate-400 group-hover:text-teal-300 transition-colors'}`}>
                 {item.icon}
               </ListItemIcon>
               <ListItemText 
                 primary={item.text} 
-                className={`${location.pathname === item.path ? 'text-teal-100 font-bold' : 'text-slate-400'}`}
+                className={`relative z-10 ${location.pathname === item.path ? 'text-teal-100 font-bold' : 'text-slate-400 group-hover:text-teal-200 transition-colors'}`}
                 primaryTypographyProps={{ fontWeight: location.pathname === item.path ? 700 : 500 }}
               />
             </ListItem>
